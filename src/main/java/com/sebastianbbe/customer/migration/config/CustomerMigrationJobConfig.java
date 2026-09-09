@@ -24,7 +24,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Configuration
 public class CustomerMigrationJobConfig {
 
-    private static final int CHUNK_SIZE = 500;
+    private static final int CHUNK_SIZE = 100;
 
     @Bean
     public JpaPagingItemReader<LegacyCustomerEntity> customerReader(EntityManagerFactory entityManagerFactory) {
