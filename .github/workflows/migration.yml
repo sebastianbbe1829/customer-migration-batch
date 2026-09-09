@@ -43,5 +43,41 @@ jobs:
           test -n "$DB_PASSWORD" || { echo "DB_PASSWORD secret is not configured"; exit 1; }
           echo "Database configuration detected. Credentials are not displayed."
 
-      - name: Run migration
-        run: mvn -B spring-boot:run "-Dspring-boot.run.arguments=--batch.migration.enabled=true"
+      - name: Run migration and capture results
+        shell: bash
+        run: |
+          set +e
+          mvn -B spring-boot:run "-Dspring-boot.run.arguments=--batch.migration.enabled=true" 2>&1 | tee migration.log
+          migration_status=${PIPESTATUS[0]}
+          set -e
+
+          step_total=$(grep -oE 'Step total: [0-9]+ ms' migration.log | tail -1 | sed 's/.*Step total: //')
+          reader_time=$(grep -oE 'Reader time: [0-9]+ ms' migration.log | tail -1 | sed 's/.*Reader time: //')
+          processor_time=$(grep -oE 'Processor time: [0-9]+ ms' migration.log | tail -1 | sed 's/.*Processor time: //')
+          writer_time=$(grep -oE 'Writer time: [0-9]+ ms' migration.log | tail -1 | sed 's/.*Writer time: //')
+          metrics=$(grep 'Reads: ' migration.log | tail -1 | sed 's/.*Reads: //')
+          job_status=$(grep -oE 'status: \[[A-Z]+\]' migration.log | tail -1 | sed 's/status: \[//;s/\]//')
+
+          {
+            echo "## Customer Migration"
+            echo
+            if [ "$migration_status" -eq 0 ]; then
+              echo "### Result: SUCCESS"
+            else
+              echo "### Result: FAILED"
+            fi
+            echo
+            echo "| Metric | Value |"
+            echo "|---|---:|"
+            echo "| Job status | ${job_status:-UNKNOWN} |"
+            echo "| Step total | ${step_total:-N/A} |"
+            echo "| Reader time | ${reader_time:-N/A} |"
+            echo "| Processor time | ${processor_time:-N/A} |"
+            echo "| Writer time | ${writer_time:-N/A} |"
+            echo "| Batch counters | ${metrics:-N/A} |"
+            echo
+            echo "Execution source: GitHub Actions"
+            echo "Database credentials: GitHub Secrets"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$migration_status"
