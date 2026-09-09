@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: customer-migration-batch
+
+  config:
+    import: "optional:file:.env[.properties]"
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  sql:
+    init:
+      mode: always
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+
+batch:
+  migration:
+    enabled: false
+
+logging:
+  level:
+    org.springframework.batch: INFO
+    org.hibernate.SQL: INFO
