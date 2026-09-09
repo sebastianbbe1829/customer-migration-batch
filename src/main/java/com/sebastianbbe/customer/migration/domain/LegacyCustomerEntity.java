@@ -35,6 +35,19 @@ public class LegacyCustomerEntity {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    protected LegacyCustomerEntity() {
+    }
+
+    public LegacyCustomerEntity(String documentNumber, String fullName, String email,
+                                 String phone, String status, LocalDateTime createdAt) {
+        this.documentNumber = documentNumber;
+        this.fullName = fullName;
+        this.email = email;
+        this.phone = phone;
+        this.status = status;
+        this.createdAt = createdAt;
+    }
+
     public Long getId() { return id; }
     public String getDocumentNumber() { return documentNumber; }
     public String getFullName() { return fullName; }
