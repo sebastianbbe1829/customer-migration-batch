@@ -14,7 +14,11 @@ import org.springframework.batch.item.Chunk;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.Timestamp;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -33,12 +37,14 @@ public class CustomerMigrationPerformanceListener implements
     private final AtomicLong processNanos = new AtomicLong();
     private final AtomicLong writeNanos = new AtomicLong();
     private final AtomicLong insertCount = new AtomicLong();
-    private final AtomicLong updateCount = new AtomicLong();
+    private final AtomicLong existingCount = new AtomicLong();
+    private final AtomicLong businessUpdateCount = new AtomicLong();
+    private final AtomicLong unchangedCount = new AtomicLong();
 
     private final ThreadLocal<Long> readStart = new ThreadLocal<>();
     private final ThreadLocal<Long> processStart = new ThreadLocal<>();
     private final ThreadLocal<Long> writeStart = new ThreadLocal<>();
-    private final ThreadLocal<Set<String>> existingDocumentsBeforeWrite = new ThreadLocal<>();
+    private final ThreadLocal<Map<String, TargetSnapshot>> targetSnapshotsBeforeWrite = new ThreadLocal<>();
 
     public CustomerMigrationPerformanceListener(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -86,39 +92,64 @@ public class CustomerMigrationPerformanceListener implements
         }
 
         if (documents.isEmpty()) {
-            existingDocumentsBeforeWrite.set(Set.of());
+            targetSnapshotsBeforeWrite.set(Collections.emptyMap());
             return;
         }
 
-        String placeholders = String.join(",", java.util.Collections.nCopies(documents.size(), "?"));
-        Set<String> existing = new HashSet<>(jdbcTemplate.queryForList(
-                "SELECT document_number FROM target.customers WHERE document_number IN (" + placeholders + ")",
-                String.class,
-                documents.toArray()));
-        existingDocumentsBeforeWrite.set(existing);
+        String placeholders = String.join(",", Collections.nCopies(documents.size(), "?"));
+        Map<String, TargetSnapshot> snapshots = new HashMap<>();
+
+        jdbcTemplate.query(
+                "SELECT document_number, first_name, last_name, email, phone, status, created_at "
+                        + "FROM target.customers WHERE document_number IN (" + placeholders + ")",
+                documents.toArray(),
+                rs -> {
+                    snapshots.put(
+                            rs.getString("document_number"),
+                            new TargetSnapshot(
+                                    rs.getString("first_name"),
+                                    rs.getString("last_name"),
+                                    rs.getString("email"),
+                                    rs.getString("phone"),
+                                    rs.getString("status"),
+                                    rs.getTimestamp("created_at")));
+                });
+
+        targetSnapshotsBeforeWrite.set(snapshots);
     }
 
     @Override
     public void afterWrite(Chunk<? extends TargetCustomerEntity> items) {
         addElapsed(writeNanos, writeStart);
 
-        Set<String> existing = existingDocumentsBeforeWrite.get();
-        if (existing != null) {
+        Map<String, TargetSnapshot> snapshots = targetSnapshotsBeforeWrite.get();
+        if (snapshots != null) {
             for (TargetCustomerEntity item : items) {
-                if (item.getDocumentNumber() != null && existing.contains(item.getDocumentNumber())) {
-                    updateCount.incrementAndGet();
-                } else {
+                if (item.getDocumentNumber() == null) {
+                    continue;
+                }
+
+                TargetSnapshot existing = snapshots.get(item.getDocumentNumber());
+                if (existing == null) {
                     insertCount.incrementAndGet();
+                    continue;
+                }
+
+                existingCount.incrementAndGet();
+                if (existing.matches(item)) {
+                    unchangedCount.incrementAndGet();
+                } else {
+                    businessUpdateCount.incrementAndGet();
                 }
             }
         }
-        existingDocumentsBeforeWrite.remove();
+        targetSnapshotsBeforeWrite.remove();
     }
 
     @Override
     public void onWriteError(Exception exception, Chunk<? extends TargetCustomerEntity> items) {
         addElapsed(writeNanos, writeStart);
-        existingDocumentsBeforeWrite.remove();
+        targetSnapshotsBeforeWrite.remove();
     }
 
     @Override
@@ -127,7 +158,9 @@ public class CustomerMigrationPerformanceListener implements
         processNanos.set(0);
         writeNanos.set(0);
         insertCount.set(0);
-        updateCount.set(0);
+        existingCount.set(0);
+        businessUpdateCount.set(0);
+        unchangedCount.set(0);
     }
 
     @Override
@@ -143,13 +176,15 @@ public class CustomerMigrationPerformanceListener implements
         log.info("Writer time: {} ms", nanosToMillis(writeNanos.get()));
         log.info("Unaccounted time: {} ms", nanosToMillis(Math.max(0L,
                 totalNanos - readNanos.get() - processNanos.get() - writeNanos.get())));
-        log.info("Reads: {}, process skips: {}, filters: {}, writes: {}, inserts: {}, updates: {}, read skips: {}, write skips: {}, commits: {}, rollbacks: {}",
+        log.info("Reads: {}, process skips: {}, filters: {}, writes: {}, inserts: {}, existing: {}, business updates: {}, unchanged: {}, read skips: {}, write skips: {}, commits: {}, rollbacks: {}",
                 stepExecution.getReadCount(),
                 stepExecution.getProcessSkipCount(),
                 stepExecution.getFilterCount(),
                 stepExecution.getWriteCount(),
                 insertCount.get(),
-                updateCount.get(),
+                existingCount.get(),
+                businessUpdateCount.get(),
+                unchangedCount.get(),
                 stepExecution.getReadSkipCount(),
                 stepExecution.getWriteSkipCount(),
                 stepExecution.getCommitCount(),
@@ -169,5 +204,25 @@ public class CustomerMigrationPerformanceListener implements
 
     private long nanosToMillis(long nanos) {
         return nanos / 1_000_000;
+    }
+
+    private record TargetSnapshot(
+            String firstName,
+            String lastName,
+            String email,
+            String phone,
+            String status,
+            Timestamp createdAt) {
+
+        boolean matches(TargetCustomerEntity item) {
+            return java.util.Objects.equals(firstName, item.getFirstName())
+                    && java.util.Objects.equals(lastName, item.getLastName())
+                    && java.util.Objects.equals(email, item.getEmail())
+                    && java.util.Objects.equals(phone, item.getPhone())
+                    && java.util.Objects.equals(status, item.getStatus())
+                    && (createdAt == null
+                    ? item.getCreatedAt() == null
+                    : java.util.Objects.equals(createdAt.toLocalDateTime(), item.getCreatedAt()));
+        }
     }
 }
