@@ -4,6 +4,7 @@ import com.sebastianbbe.customer.migration.domain.LegacyCustomerEntity;
 import com.sebastianbbe.customer.migration.domain.TargetCustomerEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.ItemProcessListener;
 import org.springframework.batch.core.ItemReadListener;
 import org.springframework.batch.core.ItemWriteListener;
@@ -104,7 +105,7 @@ public class CustomerMigrationPerformanceListener implements
                 stepExecution.getRollbackCount());
         log.info("==========================");
 
-        return null;
+        return ExitStatus.COMPLETED;
     }
 
     private void addElapsed(AtomicLong accumulator, ThreadLocal<Long> startHolder) {
