@@ -73,7 +73,8 @@ public class CustomerMigrationJobConfig {
                 .skip(DataIntegrityViolationException.class)
                 .retryLimit(3)
                 .retry(DeadlockLoserDataAccessException.class)
-                .listener(skipListener)
+                .listener((org.springframework.batch.core.SkipListener<LegacyCustomerEntity, TargetCustomerEntity>) skipListener)
+                .listener((org.springframework.batch.core.StepExecutionListener) skipListener)
                 .build();
     }
 
