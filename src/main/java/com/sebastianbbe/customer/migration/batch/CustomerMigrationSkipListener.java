@@ -10,8 +10,9 @@ import org.springframework.batch.core.annotation.BeforeStep;
 import org.springframework.batch.core.listener.StepExecutionListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Component
 public class CustomerMigrationSkipListener
@@ -20,11 +21,16 @@ public class CustomerMigrationSkipListener
     private static final Logger log = LoggerFactory.getLogger(CustomerMigrationSkipListener.class);
 
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
     private Long jobExecutionId;
     private Long stepExecutionId;
 
-    public CustomerMigrationSkipListener(JdbcTemplate jdbcTemplate) {
+    public CustomerMigrationSkipListener(
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactionManager) {
         this.jdbcTemplate = jdbcTemplate;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @BeforeStep
@@ -48,14 +54,12 @@ public class CustomerMigrationSkipListener
 
     @Override
     public void onSkipInWrite(TargetCustomerEntity item, Throwable t) {
-        Long legacyId = null;
         String document = item != null ? item.getDocumentNumber() : null;
 
-        logAndPersist(legacyId, document, "WRITE", t);
+        logAndPersist(null, document, "WRITE", t);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    protected void logAndPersist(Long legacyId, String document, String stage, Throwable t) {
+    private void logAndPersist(Long legacyId, String document, String stage, Throwable t) {
         String errorType = t != null ? t.getClass().getSimpleName() : "UnknownException";
         String errorMessage = t != null && t.getMessage() != null
                 ? t.getMessage()
@@ -65,7 +69,7 @@ public class CustomerMigrationSkipListener
                 "Customer skipped. stage={}, legacyId={}, document={}, errorType={}, reason={}",
                 stage, legacyId, document, errorType, errorMessage);
 
-        jdbcTemplate.update("""
+        transactionTemplate.executeWithoutResult(status -> jdbcTemplate.update("""
                 INSERT INTO target.migration_errors (
                     job_execution_id,
                     step_execution_id,
@@ -82,6 +86,6 @@ public class CustomerMigrationSkipListener
                 document,
                 stage,
                 errorType,
-                errorMessage);
+                errorMessage));
     }
 }
