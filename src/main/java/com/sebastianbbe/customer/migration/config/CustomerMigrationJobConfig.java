@@ -73,6 +73,23 @@ public class CustomerMigrationJobConfig {
                             :createdAt,
                             :migratedAt
                         )
+                        ON CONFLICT (document_number) DO UPDATE SET
+                            first_name = EXCLUDED.first_name,
+                            last_name = EXCLUDED.last_name,
+                            email = EXCLUDED.email,
+                            phone = EXCLUDED.phone,
+                            status = EXCLUDED.status,
+                            created_at = EXCLUDED.created_at,
+                            migrated_at = CASE
+                                WHEN target.customers.first_name IS DISTINCT FROM EXCLUDED.first_name
+                                  OR target.customers.last_name IS DISTINCT FROM EXCLUDED.last_name
+                                  OR target.customers.email IS DISTINCT FROM EXCLUDED.email
+                                  OR target.customers.phone IS DISTINCT FROM EXCLUDED.phone
+                                  OR target.customers.status IS DISTINCT FROM EXCLUDED.status
+                                  OR target.customers.created_at IS DISTINCT FROM EXCLUDED.created_at
+                                THEN CURRENT_TIMESTAMP
+                                ELSE target.customers.migrated_at
+                            END
                         """)
                 .beanMapped()
                 .assertUpdates(true)
