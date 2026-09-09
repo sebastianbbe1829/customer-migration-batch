@@ -35,6 +35,9 @@ public class CustomerMigrationProcessor implements ItemProcessor<LegacyCustomerE
         }
 
         String status = normalize(item.getStatus());
+        if (status != null) {
+            status = status.toUpperCase(Locale.ROOT);
+        }
         if (status == null || !(status.equals("ACTIVE") || status.equals("INACTIVE"))) {
             throw new CustomerMigrationException("Unsupported status: " + item.getStatus());
         }
