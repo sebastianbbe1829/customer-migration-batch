@@ -1,13 +1,10 @@
 package com.sebastianbbe.customer.migration.legacy;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-
 /**
- * Temporary compatibility holder for the initial repository layout.
- * The active entity lives under the conventional package path.
+ * Kept temporarily for the initial repository layout.
+ * The active JPA entity is under com.sebastianbbe.customer.migration.domain.
  */
-@Entity(name = "LegacyCustomerLegacyEntity")
-@Table(name = "customers", schema = "legacy")
-public class LegacyCustomerEntity {
+public final class LegacyCustomerEntity {
+    private LegacyCustomerEntity() {
+    }
 }
