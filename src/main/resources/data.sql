@@ -36,4 +36,4 @@ SELECT
     '310' || lpad(gs::text, 7, '0') AS phone,
     CASE WHEN gs % 10 = 0 THEN 'INACTIVE' ELSE 'ACTIVE' END AS status
 FROM generate_series(1, 488) AS gs
-WHERE NOT EXISTS (SELECT 1 FROM legacy.customers)
+WHERE NOT EXISTS (SELECT 1 FROM legacy.customers);
