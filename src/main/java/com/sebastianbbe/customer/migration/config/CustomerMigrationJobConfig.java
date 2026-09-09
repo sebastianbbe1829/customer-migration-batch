@@ -19,7 +19,6 @@ import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilde
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -67,9 +66,9 @@ public class CustomerMigrationJobConfig {
                             :documentNumber,
                             :firstName,
                             :lastName,
+                            :status,
                             :email,
                             :phone,
-                            :status,
                             :createdAt,
                             :migratedAt
                         )
@@ -99,7 +98,6 @@ public class CustomerMigrationJobConfig {
                 .skip(CustomerMigrationException.class)
                 .skip(DataIntegrityViolationException.class)
                 .retryLimit(3)
-                .retry(DeadlockLoserDataAccessException.class)
                 .listener((org.springframework.batch.core.SkipListener<LegacyCustomerEntity, TargetCustomerEntity>) skipListener)
                 .listener((org.springframework.batch.core.StepExecutionListener) skipListener)
                 .listener((org.springframework.batch.core.ItemReadListener<LegacyCustomerEntity>) performanceListener)
