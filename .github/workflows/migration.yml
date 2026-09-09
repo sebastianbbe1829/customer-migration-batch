@@ -77,6 +77,9 @@ jobs:
           metrics=$(grep 'Reads: ' migration.log | tail -1 | sed 's/.*Reads: //')
           job_status=$(grep -oE 'status: \[[A-Z]+\]' migration.log | tail -1 | sed 's/status: \[//;s/\]//')
 
+          inserts=$(echo "$metrics" | grep -oE 'inserts: [0-9]+' | sed 's/inserts: //' || true)
+          updates=$(echo "$metrics" | grep -oE 'updates: [0-9]+' | sed 's/updates: //' || true)
+
           {
             echo "## Customer Migration"
             echo
@@ -94,6 +97,8 @@ jobs:
             echo "| Reader time | ${reader_time:-N/A} |"
             echo "| Processor time | ${processor_time:-N/A} |"
             echo "| Writer time | ${writer_time:-N/A} |"
+            echo "| Inserts | ${inserts:-N/A} |"
+            echo "| Updates | ${updates:-N/A} |"
             echo "| Batch counters | ${metrics:-N/A} |"
             echo
             echo "Execution source: GitHub Actions"
