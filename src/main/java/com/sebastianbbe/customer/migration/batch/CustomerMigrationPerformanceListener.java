@@ -97,15 +97,18 @@ public class CustomerMigrationPerformanceListener implements
         log.info("Writer time: {} ms", nanosToMillis(writeNanos.get()));
         log.info("Unaccounted time: {} ms", nanosToMillis(Math.max(0L,
                 totalNanos - readNanos.get() - processNanos.get() - writeNanos.get())));
-        log.info("Reads: {}, processed: {}, written: {}, commits: {}, rollbacks: {}",
+        log.info("Reads: {}, process skips: {}, filters: {}, writes: {}, read skips: {}, write skips: {}, commits: {}, rollbacks: {}",
                 stepExecution.getReadCount(),
-                stepExecution.getProcessSkipCount() + stepExecution.getWriteCount(),
+                stepExecution.getProcessSkipCount(),
+                stepExecution.getFilterCount(),
                 stepExecution.getWriteCount(),
+                stepExecution.getReadSkipCount(),
+                stepExecution.getWriteSkipCount(),
                 stepExecution.getCommitCount(),
                 stepExecution.getRollbackCount());
         log.info("==========================");
 
-        return ExitStatus.COMPLETED;
+        return stepExecution.getExitStatus();
     }
 
     private void addElapsed(AtomicLong accumulator, ThreadLocal<Long> startHolder) {
