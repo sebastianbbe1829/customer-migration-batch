@@ -25,5 +25,19 @@ CREATE TABLE IF NOT EXISTS target.customers (
     CONSTRAINT ck_target_customers_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
 );
 
+CREATE TABLE IF NOT EXISTS target.migration_errors (
+    id BIGSERIAL PRIMARY KEY,
+    job_execution_id BIGINT,
+    step_execution_id BIGINT,
+    legacy_customer_id BIGINT,
+    document_number VARCHAR(30),
+    stage VARCHAR(20) NOT NULL,
+    error_type VARCHAR(255) NOT NULL,
+    error_message TEXT NOT NULL,
+    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_legacy_customers_document ON legacy.customers(document_number);
 CREATE INDEX IF NOT EXISTS idx_target_customers_status ON target.customers(status);
+CREATE INDEX IF NOT EXISTS idx_migration_errors_job_execution ON target.migration_errors(job_execution_id);
+CREATE INDEX IF NOT EXISTS idx_migration_errors_occurred_at ON target.migration_errors(occurred_at);
