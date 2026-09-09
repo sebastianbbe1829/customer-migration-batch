@@ -1,5 +1,6 @@
 package com.sebastianbbe.customer.migration.config;
 
+import com.sebastianbbe.customer.migration.batch.CustomerMigrationException;
 import com.sebastianbbe.customer.migration.batch.CustomerMigrationProcessor;
 import com.sebastianbbe.customer.migration.batch.CustomerMigrationSkipListener;
 import com.sebastianbbe.customer.migration.domain.LegacyCustomerEntity;
@@ -10,10 +11,10 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.infrastructure.item.database.JpaItemWriter;
-import org.springframework.batch.infrastructure.item.database.JpaPagingItemReader;
-import org.springframework.batch.infrastructure.item.database.builder.JpaItemWriterBuilder;
-import org.springframework.batch.infrastructure.item.database.builder.JpaPagingItemReaderBuilder;
+import org.springframework.batch.item.database.JpaItemWriter;
+import org.springframework.batch.item.database.JpaPagingItemReader;
+import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
+import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -68,7 +69,7 @@ public class CustomerMigrationJobConfig {
                 .writer(customerWriter)
                 .faultTolerant()
                 .skipLimit(10)
-                .skip(com.sebastianbbe.customer.migration.batch.CustomerMigrationException.class)
+                .skip(CustomerMigrationException.class)
                 .skip(DataIntegrityViolationException.class)
                 .retryLimit(3)
                 .retry(DeadlockLoserDataAccessException.class)
