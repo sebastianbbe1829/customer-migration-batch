@@ -12,14 +12,15 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.database.JpaItemWriter;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
-import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
+import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
@@ -48,9 +49,33 @@ public class CustomerMigrationJobConfig {
     }
 
     @Bean
-    public JpaItemWriter<TargetCustomerEntity> customerWriter(EntityManagerFactory entityManagerFactory) {
-        return new JpaItemWriterBuilder<TargetCustomerEntity>()
-                .entityManagerFactory(entityManagerFactory)
+    public JdbcBatchItemWriter<TargetCustomerEntity> customerWriter(
+            NamedParameterJdbcTemplate jdbcTemplate) {
+        return new JdbcBatchItemWriterBuilder<TargetCustomerEntity>()
+                .namedParametersJdbcTemplate(jdbcTemplate)
+                .sql("""
+                        INSERT INTO target.customers (
+                            document_number,
+                            first_name,
+                            last_name,
+                            email,
+                            phone,
+                            status,
+                            created_at,
+                            migrated_at
+                        ) VALUES (
+                            :documentNumber,
+                            :firstName,
+                            :lastName,
+                            :email,
+                            :phone,
+                            :status,
+                            :createdAt,
+                            :migratedAt
+                        )
+                        """)
+                .beanMapped()
+                .assertUpdates(true)
                 .build();
     }
 
@@ -60,7 +85,7 @@ public class CustomerMigrationJobConfig {
             PlatformTransactionManager transactionManager,
             JpaPagingItemReader<LegacyCustomerEntity> customerReader,
             CustomerMigrationProcessor processor,
-            JpaItemWriter<TargetCustomerEntity> customerWriter,
+            JdbcBatchItemWriter<TargetCustomerEntity> customerWriter,
             CustomerMigrationSkipListener skipListener,
             CustomerMigrationPerformanceListener performanceListener) {
 
