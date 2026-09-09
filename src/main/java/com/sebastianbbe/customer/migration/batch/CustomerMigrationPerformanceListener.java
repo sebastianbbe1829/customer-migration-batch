@@ -11,8 +11,11 @@ import org.springframework.batch.core.ItemWriteListener;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.StepExecutionListener;
 import org.springframework.batch.item.Chunk;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
@@ -24,13 +27,22 @@ public class CustomerMigrationPerformanceListener implements
 
     private static final Logger log = LoggerFactory.getLogger(CustomerMigrationPerformanceListener.class);
 
+    private final JdbcTemplate jdbcTemplate;
+
     private final AtomicLong readNanos = new AtomicLong();
     private final AtomicLong processNanos = new AtomicLong();
     private final AtomicLong writeNanos = new AtomicLong();
+    private final AtomicLong insertCount = new AtomicLong();
+    private final AtomicLong updateCount = new AtomicLong();
 
     private final ThreadLocal<Long> readStart = new ThreadLocal<>();
     private final ThreadLocal<Long> processStart = new ThreadLocal<>();
     private final ThreadLocal<Long> writeStart = new ThreadLocal<>();
+    private final ThreadLocal<Set<String>> existingDocumentsBeforeWrite = new ThreadLocal<>();
+
+    public CustomerMigrationPerformanceListener(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     @Override
     public void beforeRead() {
@@ -65,16 +77,48 @@ public class CustomerMigrationPerformanceListener implements
     @Override
     public void beforeWrite(Chunk<? extends TargetCustomerEntity> items) {
         writeStart.set(System.nanoTime());
+
+        Set<String> documents = new HashSet<>();
+        for (TargetCustomerEntity item : items) {
+            if (item.getDocumentNumber() != null) {
+                documents.add(item.getDocumentNumber());
+            }
+        }
+
+        if (documents.isEmpty()) {
+            existingDocumentsBeforeWrite.set(Set.of());
+            return;
+        }
+
+        String placeholders = String.join(",", java.util.Collections.nCopies(documents.size(), "?"));
+        Set<String> existing = new HashSet<>(jdbcTemplate.queryForList(
+                "SELECT document_number FROM target.customers WHERE document_number IN (" + placeholders + ")",
+                String.class,
+                documents.toArray()));
+        existingDocumentsBeforeWrite.set(existing);
     }
 
     @Override
     public void afterWrite(Chunk<? extends TargetCustomerEntity> items) {
         addElapsed(writeNanos, writeStart);
+
+        Set<String> existing = existingDocumentsBeforeWrite.get();
+        if (existing != null) {
+            for (TargetCustomerEntity item : items) {
+                if (item.getDocumentNumber() != null && existing.contains(item.getDocumentNumber())) {
+                    updateCount.incrementAndGet();
+                } else {
+                    insertCount.incrementAndGet();
+                }
+            }
+        }
+        existingDocumentsBeforeWrite.remove();
     }
 
     @Override
     public void onWriteError(Exception exception, Chunk<? extends TargetCustomerEntity> items) {
         addElapsed(writeNanos, writeStart);
+        existingDocumentsBeforeWrite.remove();
     }
 
     @Override
@@ -82,6 +126,8 @@ public class CustomerMigrationPerformanceListener implements
         readNanos.set(0);
         processNanos.set(0);
         writeNanos.set(0);
+        insertCount.set(0);
+        updateCount.set(0);
     }
 
     @Override
@@ -97,11 +143,13 @@ public class CustomerMigrationPerformanceListener implements
         log.info("Writer time: {} ms", nanosToMillis(writeNanos.get()));
         log.info("Unaccounted time: {} ms", nanosToMillis(Math.max(0L,
                 totalNanos - readNanos.get() - processNanos.get() - writeNanos.get())));
-        log.info("Reads: {}, process skips: {}, filters: {}, writes: {}, read skips: {}, write skips: {}, commits: {}, rollbacks: {}",
+        log.info("Reads: {}, process skips: {}, filters: {}, writes: {}, inserts: {}, updates: {}, read skips: {}, write skips: {}, commits: {}, rollbacks: {}",
                 stepExecution.getReadCount(),
                 stepExecution.getProcessSkipCount(),
                 stepExecution.getFilterCount(),
                 stepExecution.getWriteCount(),
+                insertCount.get(),
+                updateCount.get(),
                 stepExecution.getReadSkipCount(),
                 stepExecution.getWriteSkipCount(),
                 stepExecution.getCommitCount(),
