@@ -78,7 +78,9 @@ jobs:
           job_status=$(grep -oE 'status: \[[A-Z]+\]' migration.log | tail -1 | sed 's/status: \[//;s/\]//')
 
           inserts=$(echo "$metrics" | grep -oE 'inserts: [0-9]+' | sed 's/inserts: //' || true)
-          updates=$(echo "$metrics" | grep -oE 'updates: [0-9]+' | sed 's/updates: //' || true)
+          existing=$(echo "$metrics" | grep -oE 'existing: [0-9]+' | sed 's/existing: //' || true)
+          business_updates=$(echo "$metrics" | grep -oE 'business updates: [0-9]+' | sed 's/business updates: //' || true)
+          unchanged=$(echo "$metrics" | grep -oE 'unchanged: [0-9]+' | sed 's/unchanged: //' || true)
 
           {
             echo "## Customer Migration"
@@ -98,7 +100,9 @@ jobs:
             echo "| Processor time | ${processor_time:-N/A} |"
             echo "| Writer time | ${writer_time:-N/A} |"
             echo "| Inserts | ${inserts:-N/A} |"
-            echo "| Updates | ${updates:-N/A} |"
+            echo "| Existing | ${existing:-N/A} |"
+            echo "| Business updates | ${business_updates:-N/A} |"
+            echo "| Unchanged | ${unchanged:-N/A} |"
             echo "| Batch counters | ${metrics:-N/A} |"
             echo
             echo "Execution source: GitHub Actions"
