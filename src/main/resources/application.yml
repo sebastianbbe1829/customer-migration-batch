@@ -28,6 +28,10 @@ spring:
     job:
       enabled: false
 
+batch:
+  migration:
+    enabled: false
+
 logging:
   level:
     org.springframework.batch: INFO
