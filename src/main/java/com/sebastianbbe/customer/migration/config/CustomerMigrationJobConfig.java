@@ -1,6 +1,7 @@
 package com.sebastianbbe.customer.migration.config;
 
 import com.sebastianbbe.customer.migration.batch.CustomerMigrationException;
+import com.sebastianbbe.customer.migration.batch.CustomerMigrationPerformanceListener;
 import com.sebastianbbe.customer.migration.batch.CustomerMigrationProcessor;
 import com.sebastianbbe.customer.migration.batch.CustomerMigrationSkipListener;
 import com.sebastianbbe.customer.migration.domain.LegacyCustomerEntity;
@@ -60,7 +61,8 @@ public class CustomerMigrationJobConfig {
             JpaPagingItemReader<LegacyCustomerEntity> customerReader,
             CustomerMigrationProcessor processor,
             JpaItemWriter<TargetCustomerEntity> customerWriter,
-            CustomerMigrationSkipListener skipListener) {
+            CustomerMigrationSkipListener skipListener,
+            CustomerMigrationPerformanceListener performanceListener) {
 
         return new StepBuilder("customerMigrationStep", jobRepository)
                 .<LegacyCustomerEntity, TargetCustomerEntity>chunk(CHUNK_SIZE, transactionManager)
@@ -75,6 +77,10 @@ public class CustomerMigrationJobConfig {
                 .retry(DeadlockLoserDataAccessException.class)
                 .listener((org.springframework.batch.core.SkipListener<LegacyCustomerEntity, TargetCustomerEntity>) skipListener)
                 .listener((org.springframework.batch.core.StepExecutionListener) skipListener)
+                .listener((org.springframework.batch.core.ItemReadListener<LegacyCustomerEntity>) performanceListener)
+                .listener((org.springframework.batch.core.ItemProcessListener<LegacyCustomerEntity, TargetCustomerEntity>) performanceListener)
+                .listener((org.springframework.batch.core.ItemWriteListener<TargetCustomerEntity>) performanceListener)
+                .listener((org.springframework.batch.core.StepExecutionListener) performanceListener)
                 .build();
     }
 
