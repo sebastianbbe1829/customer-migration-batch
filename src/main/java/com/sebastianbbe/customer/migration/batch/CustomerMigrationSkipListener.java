@@ -5,27 +5,83 @@ import com.sebastianbbe.customer.migration.domain.TargetCustomerEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.SkipListener;
+import org.springframework.batch.core.StepExecution;
+import org.springframework.batch.core.annotation.BeforeStep;
+import org.springframework.batch.core.listener.StepExecutionListener;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
-public class CustomerMigrationSkipListener implements SkipListener<LegacyCustomerEntity, TargetCustomerEntity> {
+public class CustomerMigrationSkipListener
+        implements SkipListener<LegacyCustomerEntity, TargetCustomerEntity>, StepExecutionListener {
 
     private static final Logger log = LoggerFactory.getLogger(CustomerMigrationSkipListener.class);
 
+    private final JdbcTemplate jdbcTemplate;
+    private Long jobExecutionId;
+    private Long stepExecutionId;
+
+    public CustomerMigrationSkipListener(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @BeforeStep
+    public void beforeStep(StepExecution stepExecution) {
+        this.jobExecutionId = stepExecution.getJobExecutionId();
+        this.stepExecutionId = stepExecution.getId();
+    }
+
     @Override
     public void onSkipInRead(Throwable t) {
-        log.warn("Customer skipped while reading: {}", t.getMessage());
+        logAndPersist(null, null, "READ", t);
     }
 
     @Override
     public void onSkipInProcess(LegacyCustomerEntity item, Throwable t) {
-        log.warn("Customer skipped during processing. legacyId={}, document={}, reason={}",
-                item.getId(), item.getDocumentNumber(), t.getMessage());
+        Long legacyId = item != null ? item.getId() : null;
+        String document = item != null ? item.getDocumentNumber() : null;
+
+        logAndPersist(legacyId, document, "PROCESS", t);
     }
 
     @Override
     public void onSkipInWrite(TargetCustomerEntity item, Throwable t) {
-        log.warn("Customer skipped during writing. document={}, reason={}",
-                item.getDocumentNumber(), t.getMessage());
+        Long legacyId = null;
+        String document = item != null ? item.getDocumentNumber() : null;
+
+        logAndPersist(legacyId, document, "WRITE", t);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    protected void logAndPersist(Long legacyId, String document, String stage, Throwable t) {
+        String errorType = t != null ? t.getClass().getSimpleName() : "UnknownException";
+        String errorMessage = t != null && t.getMessage() != null
+                ? t.getMessage()
+                : "No error message available";
+
+        log.warn(
+                "Customer skipped. stage={}, legacyId={}, document={}, errorType={}, reason={}",
+                stage, legacyId, document, errorType, errorMessage);
+
+        jdbcTemplate.update("""
+                INSERT INTO target.migration_errors (
+                    job_execution_id,
+                    step_execution_id,
+                    legacy_customer_id,
+                    document_number,
+                    stage,
+                    error_type,
+                    error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                jobExecutionId,
+                stepExecutionId,
+                legacyId,
+                document,
+                stage,
+                errorType,
+                errorMessage);
     }
 }
