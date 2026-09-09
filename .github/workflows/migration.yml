@@ -8,6 +8,14 @@ on:
         required: true
         default: ""
         type: string
+      target_mode:
+        description: "Prepare target before migration"
+        required: true
+        default: "existing"
+        type: choice
+        options:
+          - clean
+          - existing
 
 permissions:
   contents: read
@@ -43,6 +51,17 @@ jobs:
           test -n "$DB_PASSWORD" || { echo "DB_PASSWORD secret is not configured"; exit 1; }
           echo "Database configuration detected. Credentials are not displayed."
 
+      - name: Prepare target database
+        if: ${{ inputs.target_mode == 'clean' }}
+        shell: bash
+        run: |
+          DB_URL_NATIVE="${DB_URL#jdbc:}"
+          export PGPASSWORD="$DB_PASSWORD"
+          echo "Cleaning target migration data..."
+          psql "$DB_URL_NATIVE" -U "$DB_USERNAME" \
+            -c "TRUNCATE TABLE target.customers, target.migration_errors RESTART IDENTITY;"
+          echo "Target migration data cleaned."
+
       - name: Run migration and capture results
         shell: bash
         run: |
@@ -69,6 +88,7 @@ jobs:
             echo
             echo "| Metric | Value |"
             echo "|---|---:|"
+            echo "| Target mode | ${{ inputs.target_mode }} |"
             echo "| Job status | ${job_status:-UNKNOWN} |"
             echo "| Step total | ${step_total:-N/A} |"
             echo "| Reader time | ${reader_time:-N/A} |"
