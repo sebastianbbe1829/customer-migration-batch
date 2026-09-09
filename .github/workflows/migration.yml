@@ -1,0 +1,47 @@
+name: Customer Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type MIGRATE to confirm execution against the configured database"
+        required: true
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Run customer migration
+    if: ${{ inputs.confirm == 'MIGRATE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DB_URL: ${{ secrets.DB_URL }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Validate database configuration
+        shell: bash
+        run: |
+          test -n "$DB_URL" || { echo "DB_URL secret is not configured"; exit 1; }
+          test -n "$DB_USERNAME" || { echo "DB_USERNAME secret is not configured"; exit 1; }
+          test -n "$DB_PASSWORD" || { echo "DB_PASSWORD secret is not configured"; exit 1; }
+          echo "Database configuration detected. Credentials are not displayed."
+
+      - name: Run migration
+        run: mvn -B spring-boot:run "-Dspring-boot.run.arguments=--batch.migration.enabled=true"
