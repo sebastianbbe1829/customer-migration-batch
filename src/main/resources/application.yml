@@ -2,6 +2,9 @@ spring:
   application:
     name: customer-migration-batch
 
+  config:
+    import: "optional:file:.env[.properties]"
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -25,6 +28,10 @@ spring:
       initialize-schema: always
     job:
       enabled: false
+
+batch:
+  migration:
+    enabled: false
 
 logging:
   level:
